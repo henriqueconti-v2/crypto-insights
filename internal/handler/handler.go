@@ -22,6 +22,7 @@ type API struct {
 	config                  *config.Config
 	createAlertUseCase      usecase.CreateAlertUseCase
 	executeAlertScanUseCase usecase.ExecuteAlertScanUseCase
+	getHomeDataUseCase      usecase.GetHomeDataUseCase
 	db                      *pkg.DB
 }
 
@@ -40,6 +41,7 @@ func NewAPI(cfg *config.Config) (*API, error) {
 		config:                  cfg,
 		createAlertUseCase:      usecase.NewCreateAlertUseCase(alertRepo),
 		executeAlertScanUseCase: usecase.NewExecuteAlertScanUseCase(alertRepo, coinMarketCapRepo, coinGeckoRepo, emailNotifier),
+		getHomeDataUseCase:      usecase.NewGetHomeDataUseCase(coinMarketCapRepo),
 		db:                      database,
 	}, nil
 }
@@ -49,6 +51,7 @@ func (api *API) SetupRoutes() http.Handler {
 
 	mux.HandleFunc("/crypto_alert_api/execute", api.handleScanExecution)
 	mux.HandleFunc("/crypto_alert_api/create", api.handleCreate)
+	mux.HandleFunc("/crypto_alert_api/home", api.handleGetHomeData)
 
 	return corsMiddleware(mux)
 }
@@ -113,4 +116,21 @@ func (api *API) handleCreate(w http.ResponseWriter, r *http.Request) {
 		"status":  "success",
 		"message": "Configuration saved successfully",
 	})
+}
+
+func (api *API) handleGetHomeData(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	homeData, err := api.getHomeDataUseCase.Execute()
+	if err != nil {
+		log.Printf("Error fetching home data: %v", err)
+		http.Error(w, "Failed to fetch home data", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(homeData)
 }
